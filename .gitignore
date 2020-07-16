@@ -2,5 +2,5 @@
 *.egg-info
 build/
 *.c
-*.sp
+*.so
 __pycache__

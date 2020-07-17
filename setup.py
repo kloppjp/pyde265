@@ -23,7 +23,7 @@ extensions = [Extension("pyde265.image", ['pyde265/image.pyx'], libraries=['de26
 
 setup(
     name="PyDe265",
-    ext_modules=cythonize(extensions, language_level=3),
+    ext_modules=cythonize(extensions, compiler_directives={'language_level': 3, 'always_allow_keywords': True}),
     version="0.1.0",
     author="Jan",
     description="Python bindings for LibDe265",

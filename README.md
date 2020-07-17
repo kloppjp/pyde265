@@ -20,6 +20,16 @@ specifically [Christian Feldmanns](https://github.com/ChristianFeldmann)'s
   
 The processing of H265's structural elements is based on [YUView](https://github.com/IENT/YUView).
  
+## Usage
+
+Take a look at the examples folder or run the signals example directly:
+
+`LD_LIBRARY_PATH="/path_to_libde265/build/libde265:$LD_LIBRARY_PATH python examples/signals.py"`
+
+This will show you the different output signals:
+
+![Output Signals](doc/signals_example.png)
+ 
 ## Installation
 
 1. Build libde265.so

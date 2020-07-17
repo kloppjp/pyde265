@@ -17,6 +17,8 @@ specifically [Christian Feldmanns](https://github.com/ChristianFeldmann)'s
   - CB: Size, Prediction Block Partitioning, Prediction mode, PCM Flag, TQBypass Flag
   - PB: Size, POC0/1 ref. frame indices & motion vectors
   - TB: Depth (size), Intra (or not), Intra Y and CbCr directions
+  
+The processing of H265's structural elements is based on [YUView](https://github.com/IENT/YUView).
  
 ## Installation
 

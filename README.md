@@ -1,6 +1,6 @@
 # PyDe265
 Python bindings for [Libde265](https://github.com/strukturag/libde265), 
-specifically [Christian Feldmanns](https://github.com/ChristianFeldmann)'s
+specifically [Christian Feldmann](https://github.com/ChristianFeldmann)'s
  [version](https://github.com/ChristianFeldmann/libde265/tree/v1.1/libde265),
   which provides better access to H265's internal image representation.
   

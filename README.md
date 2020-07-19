@@ -39,11 +39,13 @@ This will show you the different output signals:
     4. Assert that `libde265.so` is in `build/libde265`
 2. Install PyDe265
     1. Clone this repo: `git clone https://github.com/kloppjp/pyde265`
-    2. Install the package: `cd pyde265 & pip install . --install-option="--libde265_path=/path_to_libde265/build/libde265"`
+    2. Install the package: `cd pyde265 && pip install . --install-option="--libde265_path=/path_to_libde265/build/libde265"`
     
 The `--install-option` argument is necessary to tell `pip` where to find the library.
 
 Note that the library is a _shared_ object, meaning it isn't linked into the package.
 Hence, if libde265.so is not on your `LD_LIBRARY_PATH` you need to add it when running
-a python script: `LD_LIBRARY_PATH=/path_to_libde265/build/libde265 python my_script.py`.
+a python script: `LD_LIBRARY_PATH=/path_to_libde265/build/libde265 python my_script.py`. 
+Alternatively, you can add `export LD_LIBRARY_PATH="/path_to_libde265/build/libde265:$LD_LIBRARY_PATH"`
+to `$HOME/.bashrc` to make it permanent.
     

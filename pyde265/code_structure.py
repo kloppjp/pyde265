@@ -1,6 +1,6 @@
 from pyde265.image import Image
 import numpy as np
-from typing import Iterable, Tuple
+from typing import Iterable, Tuple, Iterable
 
 
 # Returns Height, Width, H Offset, W Offset
@@ -37,6 +37,40 @@ _intra_directions = np.array((
     (32, 2), (32, 5), (32, 9), (32, 13), (32, 17), (32, 21), (32, 26), (32, 32),
     (26, 32), (21, 32), (17, 32), (13, 32), (9, 32), (5, 32), (2, 32), (0, 32),
     (-2, 32), (-5, 32), (-9, 32), (-13, 32), (-17, 32), (-21, 32), (-26, 32), (-32, 32)))
+
+
+class CodeBlock:
+
+    def __init__(self, position: np.ndarray, size: int, prediction_block_partitioning: int,
+                 prediction_mode: int, pcm_flag: int, transquant_bypass_flag: int):
+        self.position = position
+        self.size = np.array([size, size])
+        self.prediction_block_partitioning = prediction_block_partitioning
+        self.prediction_mode = prediction_mode
+        self.pcm_flag = pcm_flag
+        self.transquant_bypass_flag = transquant_bypass_flag
+
+
+class PredictionBlock:
+
+    def __init__(self, position: np.ndarray, size: np.ndarray, poc0: int, poc1: int, vec0: np.ndarray,
+                 vec1: np.ndarray):
+        self.position = position
+        self.size = size
+        self.poc0 = poc0
+        self.poc1 = poc1
+        self.vec0 = vec0
+        self.vec1 = vec1
+
+
+class TransformBlock:
+
+    def __init__(self, position: np.ndarray, size: int, is_intra: int, intra_y: np.ndarray, intra_c: np.ndarray):
+        self.position = position
+        self.size = np.array([size, size])
+        self.is_intra = bool(is_intra)
+        self.intra_y = intra_y
+        self.intra_c = intra_c
 
 
 # This is based on https://github.com/IENT/YUView/blob/master/YUViewLib/src/decoder/decoderLibde265.cpp
@@ -143,3 +177,27 @@ class CodeStructure:
                     self.tb_intra_c_dir[:, idx[0]:idx[0] + block_size, idx[1]:idx[1] + block_size] = _intra_directions[
                         chroma_vector_idx][:, np.newaxis, np.newaxis] * block_size_px / 4
 
+    def iter_code_blocks(self) -> Iterable[CodeBlock]:
+        for idx, val in np.ndenumerate(self.cb_available):
+            if not val:
+                continue
+            yield CodeBlock(position=np.array(idx) * self.cb_unit_size, size=self.cb_size[idx],
+                            prediction_block_partitioning=self.cb_pb_partitioning[idx],
+                            prediction_mode=self.cb_prediction_mode[idx], pcm_flag=self.cb_pcm_flag[idx],
+                            transquant_bypass_flag=self.cb_tqbypass_flag[idx])
+
+    def iter_prediction_blocks(self) -> Iterable[PredictionBlock]:
+        for idx, val in np.ndenumerate(self.pb_available):
+            if not val:
+                continue
+            yield PredictionBlock(position=np.array(idx) * self.pb_unit_size, size=self.pb_size[:, idx],
+                                  poc0=self.pb_poc0_idx[idx], poc1=self.pb_poc1_idx[idx],
+                                  vec0=self.pb_vec0[:, idx], vec1=self.pb_vec1[:, idx])
+
+    def iter_transform_blocks(self) -> Iterable[TransformBlock]:
+        for idx, val in np.ndenumerate(self.tb_available):
+            if not val:
+                continue
+            yield TransformBlock(position=np.array(idx) * self.tb_unit_size,
+                                 size=self.cb_unit_size // self.tb_depth[idx], is_intra=self.tb_is_intra[idx],
+                                 intra_y=self.tb_intra_y_dir[:, idx], intra_c=self.tb_intra_c_dir[:, idx])

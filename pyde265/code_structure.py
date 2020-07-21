@@ -143,18 +143,27 @@ class CodeStructure:
         self.tb_is_intra = np.zeros(shape=tb_info.shape, dtype=np.int)
         self.tb_intra_y_dir = np.zeros(shape=(2, tb_info.shape[0], tb_info.shape[1]), dtype=np.int)
         self.tb_intra_c_dir = np.zeros(shape=(2, tb_info.shape[0], tb_info.shape[1]), dtype=np.int)
+        self.tb_size = np.zeros(shape=tb_info.shape, dtype=np.int)
 
         for idx, val in np.ndenumerate(self.cb_prediction_mode):
-            if val == 0:
-                self.tb_is_intra[idx[0] * cb_unit_size // tb_unit_size, idx[1] * cb_unit_size // tb_unit_size] = 1
+            tb_idx = (idx[0] * cb_unit_size // tb_unit_size, idx[1] * cb_unit_size // tb_unit_size)
+            if self.cb_available[idx] == 1:
+                self.tb_available[tb_idx] = 1
+                self.tb_size[tb_idx] = self.cb_size[idx]
+                if val == 0:
+                    self.tb_is_intra[tb_idx] = 1
 
         tb_field_h, tb_field_w = tb_info.shape
         for idx, val in np.ndenumerate(self.tb_depth):
-            for lvl in 1, 2, 3:
+            if self.tb_available[idx] == 0:
+                continue
+            cb_idx = (idx[0] * tb_unit_size // cb_unit_size, idx[1] * tb_unit_size // cb_unit_size)
+            for lvl in 1, 2, 3, 4:
                 depth = 2 ** lvl
-                block_size = cb_unit_size // tb_unit_size // depth
+                block_size = self.tb_size[idx] // tb_unit_size // depth
                 if tb_info[idx] & (depth // 2):
-                    for array, value in zip((self.tb_depth, self.tb_is_intra), (depth, self.tb_is_intra[idx])):
+                    for array, value in zip((self.tb_depth, self.tb_is_intra, self.tb_size, self.tb_available),
+                                            (depth, self.tb_is_intra[idx], block_size * self.tb_unit_size, 1)):
                         array[idx] = value
                         if idx[0] + block_size < tb_field_h:
                             array[idx[0] + block_size, idx[1]] = value
@@ -164,18 +173,17 @@ class CodeStructure:
                             array[idx[0], idx[1] + block_size] = value
                 else:
                     self.tb_available[idx] = 1
-            if self.tb_available[idx] == 1:
-                intra_idx = (idx[0] * tb_unit_size // intra_unit_size, idx[1] * tb_unit_size // intra_unit_size)
-                block_size = cb_unit_size // tb_unit_size // self.tb_depth[idx] // 2  # Block size in tb units
-                block_size_px = block_size * tb_unit_size
-                luma_vector_idx = intra_info[0][intra_idx]
-                if luma_vector_idx <= 34:
-                    self.tb_intra_y_dir[:, idx[0]:idx[0] + block_size, idx[1]:idx[1] + block_size] = _intra_directions[
-                        luma_vector_idx][:, np.newaxis, np.newaxis] * block_size_px / 4
-                chroma_vector_idx = intra_info[1][intra_idx]
-                if chroma_vector_idx <= 34:
-                    self.tb_intra_c_dir[:, idx[0]:idx[0] + block_size, idx[1]:idx[1] + block_size] = _intra_directions[
-                        chroma_vector_idx][:, np.newaxis, np.newaxis] * block_size_px / 4
+            intra_idx = (idx[0] * tb_unit_size // intra_unit_size, idx[1] * tb_unit_size // intra_unit_size)
+            block_size = self.cb_size[cb_idx] // tb_unit_size // self.tb_depth[idx]  # Block size in tb units
+            block_size_px = block_size * tb_unit_size
+            luma_vector_idx = intra_info[0][intra_idx]
+            if luma_vector_idx <= 34:
+                self.tb_intra_y_dir[:, idx[0]:idx[0] + block_size, idx[1]:idx[1] + block_size] = _intra_directions[
+                    luma_vector_idx][:, np.newaxis, np.newaxis] * block_size_px / 4
+            chroma_vector_idx = intra_info[1][intra_idx]
+            if chroma_vector_idx <= 34:
+                self.tb_intra_c_dir[:, idx[0]:idx[0] + block_size, idx[1]:idx[1] + block_size] = _intra_directions[
+                    chroma_vector_idx][:, np.newaxis, np.newaxis] * block_size_px / 4
 
     def iter_code_blocks(self) -> Iterable[CodeBlock]:
         for idx, val in np.ndenumerate(self.cb_available):
@@ -190,14 +198,15 @@ class CodeStructure:
         for idx, val in np.ndenumerate(self.pb_available):
             if not val:
                 continue
-            yield PredictionBlock(position=np.array(idx) * self.pb_unit_size, size=self.pb_size[:, idx],
+            yield PredictionBlock(position=np.array(idx) * self.pb_unit_size, size=self.pb_size[:, idx[0], idx[1]],
                                   poc0=self.pb_poc0_idx[idx], poc1=self.pb_poc1_idx[idx],
-                                  vec0=self.pb_vec0[:, idx], vec1=self.pb_vec1[:, idx])
+                                  vec0=self.pb_vec0[:, idx[0], idx[1]], vec1=self.pb_vec1[:, idx[0], idx[1]])
 
     def iter_transform_blocks(self) -> Iterable[TransformBlock]:
         for idx, val in np.ndenumerate(self.tb_available):
             if not val:
                 continue
             yield TransformBlock(position=np.array(idx) * self.tb_unit_size,
-                                 size=self.cb_unit_size // self.tb_depth[idx], is_intra=self.tb_is_intra[idx],
-                                 intra_y=self.tb_intra_y_dir[:, idx], intra_c=self.tb_intra_c_dir[:, idx])
+                                 size=self.tb_size[idx], is_intra=self.tb_is_intra[idx],
+                                 intra_y=self.tb_intra_y_dir[:, idx[0], idx[1]],
+                                 intra_c=self.tb_intra_c_dir[:, idx[0], idx[1]])

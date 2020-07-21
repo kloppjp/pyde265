@@ -24,7 +24,7 @@ The processing of H265's structural elements is based on [YUView](https://github
 
 Take a look at the examples folder or run the signals example directly:
 
-`LD_LIBRARY_PATH="/path_to_libde265/build/libde265:$LD_LIBRARY_PATH python examples/signals.py"`
+`LD_LIBRARY_PATH="/path_to_libde265/build/libde265:$LD_LIBRARY_PATH" python examples/signals.py`
 
 This will show you the different output signals:
 
@@ -32,7 +32,7 @@ This will show you the different output signals:
 
 To visualize code/prediction/transform blocks, take a look at the `blocks.py` example:
 
-`LD_LIBRARY_PATH="/path_to_libde265/build/libde265:$LD_LIBRARY_PATH python examples/blocks.py"`
+`LD_LIBRARY_PATH="/path_to_libde265/build/libde265:$LD_LIBRARY_PATH" python examples/blocks.py`
 
 Similar to YUView, this gives you
 

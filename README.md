@@ -29,6 +29,14 @@ Take a look at the examples folder or run the signals example directly:
 This will show you the different output signals:
 
 ![Output Signals](doc/signals_example.png)
+
+To visualize code/prediction/transform blocks, take a look at the `blocks.py` example:
+
+`LD_LIBRARY_PATH="/path_to_libde265/build/libde265:$LD_LIBRARY_PATH python examples/blocks.py"`
+
+Similar to YUView, this gives you
+
+![Block Structure](doc/blocks_example.png)
  
 ## Installation
 

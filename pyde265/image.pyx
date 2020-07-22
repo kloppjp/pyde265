@@ -43,8 +43,11 @@ cdef class Image(object):
                 del o
 
     def __dealloc__(self):
-        cdef int user_data = 0
-        self._image_allocation.release_buffer(self._decoder_context, self._image, &user_data)
+        return
+        # ToDo: This does not work if the deoder still has its hands on the buffer (which it somehow does), buffer
+        #       will receive a "double" free resulting in a segmentation fault if this is called.
+        # cdef int user_data = 0
+        # self._image_allocation.release_buffer(self._decoder_context, self._image, &user_data)
 
     @staticmethod
     cdef Image create(de265.de265_decoder_context * decoder_context, de265.de265_image * image):

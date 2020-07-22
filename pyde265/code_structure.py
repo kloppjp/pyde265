@@ -32,11 +32,11 @@ def _pb_position_size(mode: int, cb_size_px: int) -> Iterable[Tuple[int, int, in
         yield cb_size_px, cb_size_px // 4, 0, cb_size_px // 4 * 3
 
 
-_intra_directions = np.array((
+_intra_directions = np.flip(np.array((
     (0, 0), (0, 0), (32, -32), (32, -26), (32, -21), (32, -17), (32, -13), (32, -9), (32, -5), (32, -2), (32, 0),
     (32, 2), (32, 5), (32, 9), (32, 13), (32, 17), (32, 21), (32, 26), (32, 32),
     (26, 32), (21, 32), (17, 32), (13, 32), (9, 32), (5, 32), (2, 32), (0, 32),
-    (-2, 32), (-5, 32), (-9, 32), (-13, 32), (-17, 32), (-21, 32), (-26, 32), (-32, 32)))
+    (-2, 32), (-5, 32), (-9, 32), (-13, 32), (-17, 32), (-21, 32), (-26, 32), (-32, 32))), axis=-1)
 
 
 class CodeBlock:
@@ -89,10 +89,10 @@ class CodeStructure:
         log_size = np.bitwise_and(cb_info, 7)  # Bits 1, 2, 3
         self.cb_available = log_size > 0
         self.cb_size = np.ones_like(log_size) << log_size
-        self.cb_pb_partitioning = np.bitwise_and(cb_info, 8 + 16 + 32)  # Bits 4, 5, 6
-        self.cb_prediction_mode = np.bitwise_and(cb_info, 64 + 128)  # Bits 7, 8
-        self.cb_pcm_flag = np.bitwise_and(cb_info, 256)  # Bit 9
-        self.cb_tqbypass_flag = np.bitwise_and(cb_info, 512)  # Bit 10
+        self.cb_pb_partitioning = np.bitwise_and(cb_info, 8 + 16 + 32) >> 3  # Bits 4, 5, 6
+        self.cb_prediction_mode = np.bitwise_and(cb_info, 64 + 128) >> 6 # Bits 7, 8
+        self.cb_pcm_flag = np.bitwise_and(cb_info, 256) >> 8 # Bit 9
+        self.cb_tqbypass_flag = np.bitwise_and(cb_info, 512) >> 9  # Bit 10
 
         # Copy values to other code blocks so that in all arrays except cb_available any two elements belonging to the
         # same code block do have the same values
@@ -108,12 +108,12 @@ class CodeStructure:
         # Prediction Blocks
         pb_unit_size, pb_info = self._image.get_pb_info()
         self.pb_unit_size = pb_unit_size
-        self.pb_poc0_idx = pb_info[np.newaxis, 0]
-        self.pb_poc1_idx = pb_info[np.newaxis, 1]
-        self.pb_vec0 = pb_info[2:4]
-        self.pb_vec1 = pb_info[4:]
+        self.pb_poc0_idx = pb_info[0]
+        self.pb_poc1_idx = pb_info[1]
+        self.pb_vec0 = np.flip(pb_info[2:4], axis=0).astype(np.float32)
+        self.pb_vec1 = np.flip(pb_info[4:], axis=0).astype(np.float32)
         self.pb_size = np.zeros(shape=(2, pb_info.shape[1], pb_info.shape[2]), dtype=np.int)
-        self.pb_available = np.zeros(shape=pb_info.shape[1:], dtype=np.int)
+        self.pb_available = np.zeros(shape=(pb_info.shape[1], pb_info.shape[2]), dtype=np.int)
 
         # Copy values to other code blocks so that in all arrays except for pb_available any two elements belonging to
         # the same prediction block do have the same values
@@ -127,10 +127,14 @@ class CodeStructure:
                 w_units = w // self.pb_unit_size
                 x_units = (idx[0] * self.cb_unit_size + h_off) // self.pb_unit_size
                 y_units = (idx[1] * self.cb_unit_size + w_off) // self.pb_unit_size
-                for array in (self.pb_poc0_idx, self.pb_poc1_idx, self.pb_vec0, self.pb_vec1):
-                    array[:, x_units:x_units + h_units, y_units:y_units + w_units] = array[:, x_units, y_units]
-                array[:, x_units:x_units + h_units, y_units:y_units + w_units] = (h, w)
-                array[x_units, y_units] = 1
+                self.pb_poc0_idx[x_units:x_units + h_units, y_units:y_units + w_units] = self.pb_poc0_idx[x_units, y_units]
+                self.pb_poc1_idx[x_units:x_units + h_units, y_units:y_units + w_units] = self.pb_poc1_idx[
+                    x_units, y_units]
+                self.pb_vec0[:, x_units:x_units + h_units, y_units:y_units + w_units] = self.pb_vec0[:, x_units, y_units][:, None, None] / 4
+                self.pb_vec1[:, x_units:x_units + h_units, y_units:y_units + w_units] = self.pb_vec1[:, x_units, y_units][:, None, None] / 4
+                self.pb_size[:, x_units:x_units + h_units, y_units:y_units + w_units] = np.array((h, w))[:, None, None]
+                if h < self.pb_available.shape[0] and w < self.pb_available.shape[1]:
+                    self.pb_available[x_units, y_units] = 1
 
         # Transform Blocks
         tb_unit_size, tb_info = self._image.get_tb_info()
@@ -141,8 +145,8 @@ class CodeStructure:
         self.tb_available = np.zeros(shape=tb_info.shape, dtype=np.int)
         self.tb_depth = np.ones(shape=tb_info.shape, dtype=np.int)
         self.tb_is_intra = np.zeros(shape=tb_info.shape, dtype=np.int)
-        self.tb_intra_y_dir = np.zeros(shape=(2, tb_info.shape[0], tb_info.shape[1]), dtype=np.int)
-        self.tb_intra_c_dir = np.zeros(shape=(2, tb_info.shape[0], tb_info.shape[1]), dtype=np.int)
+        self.tb_intra_y_dir = np.zeros(shape=(2, tb_info.shape[0], tb_info.shape[1]), dtype=np.float32)
+        self.tb_intra_c_dir = np.zeros(shape=(2, tb_info.shape[0], tb_info.shape[1]), dtype=np.float32)
         self.tb_size = np.zeros(shape=tb_info.shape, dtype=np.int)
 
         for idx, val in np.ndenumerate(self.cb_prediction_mode):
@@ -157,11 +161,10 @@ class CodeStructure:
         for idx, val in np.ndenumerate(self.tb_depth):
             if self.tb_available[idx] == 0:
                 continue
-            cb_idx = (idx[0] * tb_unit_size // cb_unit_size, idx[1] * tb_unit_size // cb_unit_size)
-            for lvl in 1, 2, 3, 4:
-                depth = 2 ** lvl
-                block_size = self.tb_size[idx] // tb_unit_size // depth
-                if tb_info[idx] & (depth // 2):
+            for lvl in 1, 2, 3, 4, 5:
+                if tb_info[idx] & (1 << (lvl - 1)):
+                    depth = 2 ** lvl
+                    block_size = self.tb_size[idx] // tb_unit_size // 2
                     for array, value in zip((self.tb_depth, self.tb_is_intra, self.tb_size, self.tb_available),
                                             (depth, self.tb_is_intra[idx], block_size * self.tb_unit_size, 1)):
                         array[idx] = value
@@ -171,19 +174,17 @@ class CodeStructure:
                                 array[idx[0] + block_size, idx[1] + block_size] = value
                         if idx[1] + block_size < tb_field_w:
                             array[idx[0], idx[1] + block_size] = value
-                else:
-                    self.tb_available[idx] = 1
             intra_idx = (idx[0] * tb_unit_size // intra_unit_size, idx[1] * tb_unit_size // intra_unit_size)
-            block_size = self.cb_size[cb_idx] // tb_unit_size // self.tb_depth[idx]  # Block size in tb units
-            block_size_px = block_size * tb_unit_size
+            block_size_px = self.tb_size[idx]
+            block_size = block_size_px // self.tb_unit_size
             luma_vector_idx = intra_info[0][intra_idx]
             if luma_vector_idx <= 34:
                 self.tb_intra_y_dir[:, idx[0]:idx[0] + block_size, idx[1]:idx[1] + block_size] = _intra_directions[
-                    luma_vector_idx][:, np.newaxis, np.newaxis] * block_size_px / 4
+                    luma_vector_idx][:, np.newaxis, np.newaxis] * block_size_px / 128
             chroma_vector_idx = intra_info[1][intra_idx]
             if chroma_vector_idx <= 34:
                 self.tb_intra_c_dir[:, idx[0]:idx[0] + block_size, idx[1]:idx[1] + block_size] = _intra_directions[
-                    chroma_vector_idx][:, np.newaxis, np.newaxis] * block_size_px / 4
+                    chroma_vector_idx][:, np.newaxis, np.newaxis] * block_size_px / 128
 
     def iter_code_blocks(self) -> Iterable[CodeBlock]:
         for idx, val in np.ndenumerate(self.cb_available):

@@ -35,6 +35,14 @@ cdef class Decoder(object):
         buffer = bytearray(self.buffer_size)
         cdef char * ba = buffer
 
+        available_signals = list()
+        if self.signals_available[0] == 1:
+            available_signals.append(InternalSignal.PREDICTION)
+        if self.signals_available[1] == 1:
+            available_signals.append(InternalSignal.RESIDUAL)
+        if self.signals_available[2] == 1:
+            available_signals.append(InternalSignal.TR_COEFF)
+
         bytes_read = data.readinto(buffer)
         pos = 0
         cdef int user_data = 1
@@ -77,9 +85,16 @@ cdef class Decoder(object):
                 _decoder_logger.debug("Image pointer is null -> not yielding any image")
                 continue
             result = image.Image.create(image_ptr)
+            result.available_signals = available_signals
+            result._prefetch()
+            self.free_image()
             _decoder_logger.info(f"Returning decoded image.")
             yield result
         _decoder_logger.debug("Decoding has ended.")
+
+    def free_image(self):
+        _decoder_logger.debug("Freeing image.")
+        de265.de265_release_next_picture(self._context)
 
 
 

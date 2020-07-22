@@ -9,13 +9,29 @@ from pyde265 cimport de265, de265_internals
 
 import numpy as np
 from pyde265.de265_enums import ChromaFormat, InternalSignal
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 
 
 cdef class Image(object):
 
     def __cinit__(self):
         pass
+
+    def __init__(self):
+        self._available_signals = None
+        self._y = dict()
+        self._cb = dict()
+        self._cr = dict()
+        self._cb_unit_size = 0
+        self._ctb_unit_size = 0
+        self._pb_unit_size = 0
+        self._tb_unit_size = 0
+        self._intra_unit_size = 0
+        self._ctb_info = None
+        self._cb_info = None
+        self._intra_info = None
+        self._pb_info = None
+        self._tb_info = None
 
     @staticmethod
     cdef Image create(de265.de265_image * image):
@@ -32,20 +48,46 @@ cdef class Image(object):
         return de265.de265_get_image_width(self._image, 0)
 
     @property
+    def available_signals(self) -> List[InternalSignal]:
+        return self._available_signals
+
+    @available_signals.setter
+    def available_signals(self, available_signals: List[InternalSignal]):
+        if self._available_signals is None:
+            self._available_signals = available_signals
+
+    @property
     def chroma_format(self) -> ChromaFormat:
         return ChromaFormat(de265.de265_get_chroma_format(self._image))
 
     def y(self, signal: Union[InternalSignal, None] = None) -> np.ndarray:
-        return self.get_plane(0, signal)
+        if signal not in self._y.keys():
+            self._y[signal] = self._fetch_plane(0, signal)
+        return self._y[signal]
 
     def cb(self, signal: Union[InternalSignal, None] = None) -> np.ndarray:
-        return self.get_plane(1, signal)
+        if signal not in self._cb.keys():
+            self._cb[signal] = self._fetch_plane(1, signal)
+        return self._cb[signal]
 
     def cr(self, signal: Union[InternalSignal, None] = None) -> np.ndarray:
-        return self.get_plane(2, signal)
+        if signal not in self._cr.keys():
+            self._cr[signal] = self._fetch_plane(2, signal)
+        return self._cr[signal]
+
+    cdef _prefetch(self):
+        for signal in [None] + self.available_signals:
+            self.y(signal)
+            self.cb(signal)
+            self.cr(signal)
+        self.get_ctb_slice_indices()
+        self.get_cb_info()
+        self.get_pb_info()
+        self.get_intra_info()
+        self.get_tb_info()
 
     # ToDo: This can only do 8 bit/px for now
-    def get_plane(self, channel: int, signal: Union[InternalSignal, None] = None) -> np.ndarray:
+    def _fetch_plane(self, channel: int, signal: Union[InternalSignal, None] = None) -> np.ndarray:
         height = self.height
         width = self.width
         if channel in (1, 2):
@@ -81,49 +123,69 @@ cdef class Image(object):
 
     def get_ctb_slice_indices(self) -> Tuple[int, np.ndarray]:
         cdef int width, height, logsize
-        de265_internals.de265_internals_get_CTB_Info_Layout(self._image, &width, &height, &logsize)
-        ctb_size = 1 << logsize
-        indices = np.ascontiguousarray(np.zeros(shape=(height, width), dtype=np.uint16))
-        cdef uint16_t[:, :] memview = indices
-        de265_internals.de265_internals_get_CTB_sliceIdx(self._image, &memview[0,0])
-        return  ctb_size, indices
+        cdef uint16_t[:, :] memview
+        if self._ctb_unit_size == 0:
+            de265_internals.de265_internals_get_CTB_Info_Layout(self._image, &width, &height, &logsize)
+            ctb_size = 1 << logsize
+            indices = np.ascontiguousarray(np.zeros(shape=(height, width), dtype=np.uint16))
+            memview = indices
+            de265_internals.de265_internals_get_CTB_sliceIdx(self._image, &memview[0,0])
+            self._ctb_unit_size = ctb_size
+            self._ctb_info = indices
+        return  self._ctb_unit_size, self._ctb_unit_size
 
     def get_cb_info(self) -> Tuple[int, np.ndarray]:
         cdef int width, height, logsize
-        de265_internals.de265_internals_get_CB_Info_Layout(self._image, &width, &height, &logsize)
-        cb_size = 1 << logsize
-        info = np.ascontiguousarray(np.zeros(shape=(height, width), dtype=np.uint16))
-        cdef uint16_t[:, :] memview = info
-        de265_internals.de265_internals_get_CB_info(self._image, &memview[0, 0])
-        return cb_size, info
+        cdef uint16_t[:, :] memview
+        if self._cb_unit_size == 0:
+            de265_internals.de265_internals_get_CB_Info_Layout(self._image, &width, &height, &logsize)
+            cb_size = 1 << logsize
+            info = np.ascontiguousarray(np.zeros(shape=(height, width), dtype=np.uint16))
+            memview = info
+            de265_internals.de265_internals_get_CB_info(self._image, &memview[0, 0])
+            self._cb_unit_size = cb_size
+            self._cb_info = info
+        return self._cb_unit_size, self._cb_info
 
     def get_pb_info(self) -> Tuple[int, np.ndarray]:
         cdef int width, height, logsize
-        de265_internals.de265_internals_get_PB_Info_layout(self._image, &width, &height, &logsize)
-        pb_size = 1 << logsize
-        info = np.ascontiguousarray(np.zeros(shape=(6, height, width), dtype=np.int16))
-        cdef int16_t[:, :, :] memview = info
-        # refPOC0, refPOC1, vec0_x, vec0_y, vec1_x, vec1_y
-        de265_internals.de265_internals_get_PB_info(self._image, &memview[0, 0, 0], &memview[1, 0, 0],
-                                                    &memview[2, 0, 0], &memview[3, 0, 0], &memview[4, 0, 0],
-                                                    &memview[5, 0, 0])
-        return pb_size, info
+        cdef int16_t[:, :, :] memview
+        if self._pb_unit_size == 0:
+            de265_internals.de265_internals_get_PB_Info_layout(self._image, &width, &height, &logsize)
+            pb_size = 1 << logsize
+            info = np.ascontiguousarray(np.zeros(shape=(6, height, width), dtype=np.int16))
+            memview = info
+            # refPOC0, refPOC1, vec0_x, vec0_y, vec1_x, vec1_y
+            de265_internals.de265_internals_get_PB_info(self._image, &memview[0, 0, 0], &memview[1, 0, 0],
+                                                        &memview[2, 0, 0], &memview[3, 0, 0], &memview[4, 0, 0],
+                                                        &memview[5, 0, 0])
+            self._pb_unit_size = pb_size
+            self._pb_info = info
+        return self._pb_unit_size, self._pb_info
 
     def get_intra_info(self) -> Tuple[int, np.ndarray]:
         cdef int width, height, logsize
-        de265_internals.de265_internals_get_IntraDir_Info_layout(self._image, &width, &height, &logsize)
-        intra_size = 1 << logsize
-        info = np.ascontiguousarray(np.zeros(shape=(2, height, width), dtype=np.uint8))
-        cdef uint8_t[:, :, :] memview = info
-        # Y intra direction, C intra direction
-        de265_internals.de265_internals_get_intraDir_info(self._image, &memview[0, 0, 0], &memview[1, 0, 0])
-        return intra_size, info
+        cdef uint8_t[:, :, :] memview
+        if self._intra_unit_size == 0:
+            de265_internals.de265_internals_get_IntraDir_Info_layout(self._image, &width, &height, &logsize)
+            intra_size = 1 << logsize
+            info = np.ascontiguousarray(np.zeros(shape=(2, height, width), dtype=np.uint8))
+            memview = info
+            # Y intra direction, C intra direction
+            de265_internals.de265_internals_get_intraDir_info(self._image, &memview[0, 0, 0], &memview[1, 0, 0])
+            self._intra_unit_size = intra_size
+            self._intra_info = info
+        return self._intra_unit_size, self._intra_info
 
-    def get_tu_info(self) -> Tuple[int, np.ndarray]:
+    def get_tb_info(self) -> Tuple[int, np.ndarray]:
         cdef int width, height, logsize
-        de265_internals.de265_internals_get_TUInfo_Info_layout(self._image, &width, &height, &logsize)
-        tu_size = 1 << logsize
-        info = np.ascontiguousarray(np.zeros(shape=(height, width), dtype=np.uint8))
-        cdef uint8_t[:, :] memview = info
-        de265_internals.de265_internals_get_TUInfo_info(self._image, &memview[0, 0])
-        return tu_size, info
+        cdef uint8_t[:, :] memview
+        if self._tb_unit_size == 0:
+            de265_internals.de265_internals_get_TUInfo_Info_layout(self._image, &width, &height, &logsize)
+            tu_size = 1 << logsize
+            info = np.ascontiguousarray(np.zeros(shape=(height, width), dtype=np.uint8))
+            memview = info
+            de265_internals.de265_internals_get_TUInfo_info(self._image, &memview[0, 0])
+            self._tb_unit_size = tu_size
+            self._tb_info = info
+        return self._tb_unit_size, self._tb_info

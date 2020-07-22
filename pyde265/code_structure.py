@@ -133,7 +133,7 @@ class CodeStructure:
                 array[x_units, y_units] = 1
 
         # Transform Blocks
-        tb_unit_size, tb_info = self._image.get_tu_info()
+        tb_unit_size, tb_info = self._image.get_tb_info()
         self.tb_unit_size = tb_unit_size
         intra_unit_size, intra_info = self._image.get_intra_info()
         self.intra_unit_size = intra_unit_size

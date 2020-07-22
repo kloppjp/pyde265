@@ -37,6 +37,14 @@ To visualize code/prediction/transform blocks, take a look at the `blocks.py` ex
 Similar to YUView, this gives you
 
 ![Block Structure](doc/blocks_example.png)
+
+Lastly, if you want vector information like motion compensation or intra prediction, consider the `vector.py` 
+example:
+
+`LD_LIBRARY_PATH="/path_to_libde265/build/libde265:$LD_LIBRARY_PATH" python examples/vector.py`
+
+![Motion Compensation & Intra Prediction](doc/vector_example.png)
+
  
 ## Installation
 

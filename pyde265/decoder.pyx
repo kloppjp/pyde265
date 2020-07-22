@@ -84,7 +84,7 @@ cdef class Decoder(object):
             if image_ptr == NULL:
                 _decoder_logger.debug("Image pointer is null -> not yielding any image")
                 continue
-            result = image.Image.create(image_ptr)
+            result = image.Image.create(self._context, image_ptr)
             result.available_signals = available_signals
             result._prefetch()
             self.free_image()

@@ -11,11 +11,10 @@ import numpy as np
 from pyde265.de265_enums import ChromaFormat, InternalSignal
 from typing import Union, Tuple, List
 
-
 cdef class Image(object):
 
     def __cinit__(self):
-        pass
+        self._image_allocation = de265.de265_get_default_image_allocation_functions()
 
     def __init__(self):
         self._available_signals = None
@@ -32,11 +31,26 @@ cdef class Image(object):
         self._intra_info = None
         self._pb_info = None
         self._tb_info = None
+        self._prefetched = False
+
+    def __del__(self):
+        for signal in [None] + self.available_signals:
+            del self._y[signal]
+            del self._cb[signal]
+            del self._cr[signal]
+        for o in (self._ctb_info, self._cb_info, self._intra_info, self._pb_info, self._tb_info):
+            if o is not None:
+                del o
+
+    def __dealloc__(self):
+        cdef int user_data = 0
+        self._image_allocation.release_buffer(self._decoder_context, self._image, &user_data)
 
     @staticmethod
-    cdef Image create(de265.de265_image * image):
+    cdef Image create(de265.de265_decoder_context * decoder_context, de265.de265_image * image):
         cdef Image result = Image()
         result._image = image
+        result._decoder_context = decoder_context
         return result
 
     @property
@@ -76,6 +90,8 @@ cdef class Image(object):
         return self._cr[signal]
 
     cdef _prefetch(self):
+        if self._prefetched:
+            return
         for signal in [None] + self.available_signals:
             self.y(signal)
             self.cb(signal)
@@ -85,6 +101,7 @@ cdef class Image(object):
         self.get_pb_info()
         self.get_intra_info()
         self.get_tb_info()
+        self._prefetched = True
 
     # ToDo: This can only do 8 bit/px for now
     def _fetch_plane(self, channel: int, signal: Union[InternalSignal, None] = None) -> np.ndarray:

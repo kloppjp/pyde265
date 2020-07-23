@@ -53,7 +53,8 @@ example:
     2. Unzip: `unzip v1.1.zip && mv libde265-1.1 libde265 && rm v1.1.zip`
     3. Build it: `mkdir build && cd build && cmake .. && make`
     4. Assert that `libde265.so` is in `build/libde265`
-2. Install PyDe265
+2. Make sure that you have all python requirements: `pip install numpy cython` (or use `conda`)
+3. Install PyDe265
     1. Clone this repo: `git clone https://github.com/kloppjp/pyde265`
     2. Install the package: `cd pyde265 && pip install . --install-option="--libde265_path=/path_to_libde265/build/libde265"`
     

@@ -1,7 +1,7 @@
 from setuptools import setup, Extension, find_packages
 from Cython.Build import cythonize
 import sys
-
+import numpy as np
 
 library_dirs = list()
 for idx, argument in enumerate(sys.argv):
@@ -16,9 +16,9 @@ for idx, argument in enumerate(sys.argv):
         break
 
 
-extensions = [Extension("pyde265.image", ['pyde265/image.pyx'], libraries=['de265'], include_dirs=['include'],
+extensions = [Extension("pyde265.image", ['pyde265/image.pyx'], libraries=['de265'], include_dirs=['include', np.get_include()],
                         library_dirs=library_dirs),
-              Extension("pyde265.decoder", ['pyde265/decoder.pyx'], libraries=['de265'], include_dirs=['include'],
+              Extension("pyde265.decoder", ['pyde265/decoder.pyx'], libraries=['de265'], include_dirs=['include', np.get_include()],
                         library_dirs=library_dirs)]
 
 setup(

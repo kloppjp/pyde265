@@ -87,7 +87,6 @@ cdef class Decoder(object):
             result = image.Image.create(self._context, image_ptr)
             result.available_signals = available_signals
             result._prefetch()
-            self.free_image()
             _decoder_logger.info(f"Returning decoded image.")
             yield result
         _decoder_logger.debug("Decoding has ended.")

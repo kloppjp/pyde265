@@ -1,6 +1,6 @@
 from pyde265 cimport de265, image, de265_internals
 from pyde265.de265_enums import InternalSignal
-from typing import Iterable
+from typing import Iterable, List, Union
 from logging import getLogger
 import array
 
@@ -31,10 +31,8 @@ cdef class Decoder(object):
         self.signals_available[signal.value] = 0
         _decoder_logger.info(f"Deactivated internal signal {signal.name}")
 
-    def decode(self, data) -> Iterable[image.Image]:
-        buffer = bytearray(self.buffer_size)
-        cdef char * ba = buffer
-
+    @property
+    def available_signals(self) -> List[InternalSignal]:
         available_signals = list()
         if self.signals_available[0] == 1:
             available_signals.append(InternalSignal.PREDICTION)
@@ -42,10 +40,15 @@ cdef class Decoder(object):
             available_signals.append(InternalSignal.RESIDUAL)
         if self.signals_available[2] == 1:
             available_signals.append(InternalSignal.TR_COEFF)
+        return available_signals
+
+    def load_data(self, data):
+        buffer = bytearray(self.buffer_size)
+        cdef char * ba = buffer
 
         bytes_read = data.readinto(buffer)
         pos = 0
-        cdef int user_data = 1
+        cdef int user_data = 0
         # cdef de265.de265_error dec_error
         while bytes_read > 0:
             dec_error = de265.de265_push_data(self._context, ba, bytes_read, pos, &user_data)
@@ -66,6 +69,7 @@ cdef class Decoder(object):
         else:
             _decoder_logger.debug(f"No error during flush_data.")
 
+    def decode_next_image(self) -> Union[image.Image, None]:
         cdef int more = 1
         while more > 0:
             more = 0
@@ -85,11 +89,19 @@ cdef class Decoder(object):
                 _decoder_logger.debug("Image pointer is null -> not yielding any image")
                 continue
             result = image.Image.create(self._context, image_ptr)
-            result.available_signals = available_signals
-            result._prefetch()
+            result.available_signals = self.available_signals
             _decoder_logger.info(f"Returning decoded image.")
-            yield result
+            return result
         _decoder_logger.debug("Decoding has ended.")
+        return None
+
+    def decode(self, data) -> Iterable[image.Image]:
+        self.load_data(data)
+
+        next_image = self.decode_next_image()
+        while next_image is not None:
+            yield next_image
+            next_image = self.decode_next_image()
 
     def free_image(self):
         _decoder_logger.debug("Freeing image.")

@@ -17,7 +17,7 @@ cdef class Decoder(object):
         de265.de265_start_worker_threads(self._context, self.n_threads)
         _decoder_logger.debug(f"Worker threads have been started")
 
-    def __del__(self):
+    def __dealloc__(self):
         de265.de265_free_decoder(self._context)
         _decoder_logger.debug(f"Decoder context has been released.")
 
@@ -82,7 +82,6 @@ cdef class Decoder(object):
                 break
             else:
                 _decoder_logger.debug(f"No error during decode.")
-
             image_ptr = de265.de265_get_next_picture(self._context)
 
             if image_ptr == NULL:
